@@ -1,0 +1,325 @@
+--[[
+    ランダム丸配置
+
+    patch.aulの導入を推奨。
+    このスクリプトはpatch.aulによって追加されるobj.randexを利用できる。
+
+    by Korarei
+]]--
+
+
+@ランダム円形配置
+--[[
+    ランダム円形配置
+    
+    スライダーの説明
+        回転：円環全体を回転させる。
+        半径：円環の半径。
+        個数：個数を設定。
+        高さ：水平配置にチェックが入っているとき有効。y軸方向への伸びを設定する。
+    
+    チェックボックス、水平配置について
+        y軸を中心軸として水平配置する。また、高さが有効になる。
+    
+    ダイアログについて
+        アクセント有効：アクセントカラーを有効無効を切り替える。
+        アクセントカラー：アクセントカラーを指定できる。配色はランダムに決まる。
+        半径ランダム幅：それぞれの最終的な半径はスライダーで設定した半径に、この項目で指定したランダム幅aとすると、閉区間[-a,a]内の整数値からランダムに抽出した値1つを加算した物になる。
+        拡大率使用：拡大率を利用して半径と大きさをばらけさせます。
+        最小拡大率：[最小拡大率, 100]の間でランダムな拡大率をとります。
+        傾斜：開区間(-90°,90°)で円筒の傾きを指定する。y軸になす角である。
+        向き調整：それぞれに対して中心を向くようにする。
+        回転方向ランダム化：回転スライダーを動かしたとき動く方向をランダムにする。再度乱数関数を呼び出しているため、出力結果がチェックありとなしで異なることに注意。
+        seed：シード値。再現性のあるランダム値にする。0以上ではどのレイヤーに置くかで変わってくる。負の値でレイヤーによる出力の変化を無効化する。
+
+    by Korarei
+]]--
+
+
+--track0:回転,-3600,3600,0
+--track1:半径,0,2000,100
+--track2:個数,0,2000,100,1
+--track3:高さ,-2000,2000,0
+--check0:水平配置(カメラ制御),0
+--dialog:アクセント有効/chk,_1=0; └アクセントカラー/col,_2=0xffffff; 半径ランダム幅,_3=20; 拡大率使用/chk,_8=0; └最小拡大率,_9=50; 傾斜(-90°，90°),_4=0; 向き調整/chk,_5=1; 回転方向ランダム化/chk,_6=0; seed,_7=-1;
+
+local chk, mes = pcall(function()
+local cos, sin, tan, rad = math.cos, math.sin, math.tan, math.rad
+
+local base_rotation = obj.track0
+local base_r = obj.track1
+local n = obj.track2
+local base_height = obj.track3
+local check_hor = obj.check0
+local check_accent = _1 == 1 _1 = nil
+local col = _2 _2 = nil
+local random_r = _3 _3 = nil
+local inclination = _4 _4 = nil
+local check_direction = _5 == 1 _5 = nil
+local check_rotation = _6 == 1 _6 = nil
+local seed = _7 _7 = nil
+local check_zoom = _8 == 1 _8 = nil
+local min_zoom = _9 _9 = nil
+assert(inclination > -90 and inclination < 90, "傾斜は開区間(-90°, 90°)で入力してください。")
+assert(min_zoom >= 0, "最小拡大率は0以上の値で入力してください。")
+
+if n == 0 then
+    return
+end
+
+--乱数生成
+local rand
+if obj.randex then
+    rand = obj.randex(seed, 0)
+else
+    rand = function(st, ed)
+        seed = seed < 0 and seed - 1 or seed + 1
+        return obj.rand(st, ed, seed, 0)
+    end
+end
+--色を保持
+if check_accent then
+    obj.copybuffer("cache:pre", "obj")
+    obj.effect("単色化", "color", col, "輝度を保持する", 0)
+    obj.copybuffer("cache:colored", "obj")
+end
+--ループ外で計算しておく
+local tan_cal = tan(rad(inclination))
+
+for i = 1, n do
+    local height = check_hor and rand(0, base_height) or 0
+    local zoom = (not check_hor and check_zoom) and rand(min_zoom, 100) / 100 or 1
+    local dr = (not check_hor and check_zoom) and 0 or rand(-random_r, random_r)
+    --極座標で乱数を発生させる(angle_x:xに入ってるアルファベットはradのrとdegreeのd)
+    local r = tan_cal * height + base_r * zoom + dr
+    local rotation = check_rotation and rand(0, 1) == 1 and -base_rotation or base_rotation
+    local angle_d = rand(1,360) + rotation
+    local angle_r = rad(angle_d)
+    --向き計算
+    local ry = check_hor and check_direction and -90 - angle_d or 0
+    local rz = not check_hor and check_direction and 90 + angle_d or 0
+    --yとzを極座標からカーテシアン座標に変更
+    local y = check_hor and height or r * sin(angle_r)
+    local z = check_hor and r * sin(angle_r) or 0
+    --保持した色を描画
+    if check_accent then
+        local buf = rand(0, 1) == 0 and "cache:pre" or "cache:colored"
+        obj.copybuffer("obj", buf)
+    end
+
+    if not check_hor and check_zoom then
+        obj.zoom = zoom
+    end
+    obj.draw(r * cos(angle_r), y, z, 1, 1, 0, ry, rz)
+end
+end)
+if not chk then
+    setfont("游ゴシック",50)
+    obj.load("text", "[ランダム円形配置@ランダム丸配置.anm]\n"..mes)
+    obj.draw()
+    error("[ランダム円形配置@ランダム丸配置.anm]"..mes)
+end
+
+
+@ランダム螺旋配置
+--[[
+    ランダム螺旋配置
+    
+    スライダーの説明
+        回転：螺旋全体を回転させる。
+        半径：螺旋の半径。
+        個数：個数を設定。
+        高さ：y軸方向への伸びを設定する。
+    
+    チェックボックス、向き調整について
+        それぞれに対して中心を向くようにする。
+    
+    ダイアログについて
+        アクセント有効：アクセントカラーを有効無効を切り替える。
+        アクセントカラー：アクセントカラーを指定できる。配色はランダムに決まる。
+        半径ランダム幅：それぞれの最終的な半径はスライダーで設定した半径に、この項目で指定したランダム幅aとすると、閉区間[-a,a]内の整数値からランダムに抽出した値1つを加算した物になる。
+        高さランダム幅：それぞれの最終的な高さはスライダーで設定した半径に、この項目で指定したランダム幅aとすると、閉区間[-a,a]内の整数値からランダムに抽出した値1つを加算した物になる。
+        波数：スライダーで設定した高さ当たり何回転するか設定する。
+        seed：シード値。再現性のあるランダム値にする。0以上ではどのレイヤーに置くかで変わってくる。負の値でレイヤーによる出力の変化を無効化する。
+
+    by Korarei
+]]--
+
+
+--track0:回転,-3600,3600,0
+--track1:半径,0,2000,100
+--track2:個数,0,2000,100,1
+--track3:高さ,-2000,2000,-100
+--check0:向き調整,1
+--dialog:アクセント有効/chk,_1=0; └アクセントカラー/col,_2=0xffffff; 半径ランダム幅,_3=20; 高さランダム幅,_4=20; 傾斜(-90°，90°),_5=0; 波数,_6=1; 向き(螺旋方向)/chk,_7=1; seed,_8=-1;
+
+local chk, mes = pcall(function()
+local cos, sin, tan, atan, rad, deg = math.cos, math.sin, math.tan, math.atan, math.rad, math.deg
+local PI = math.pi
+
+local rotation = obj.track0
+local base_r = obj.track1
+local n = obj.track2
+local max_height = obj.track3
+local check_direction = obj.check0
+local check_accent = _1 == 1 _1 = nil
+local col = _2 _2 = nil
+local random_r = _3 _3 = nil
+local random_height = _4 _4 = nil
+local inclination = _5 _5 = nil
+local k = _6 _6 = nil
+local check_direction_spiral = _7 == 1 _7 = nil
+local seed = _8 _8 = nil
+assert(k > 0, "波数は0を超える実数を入力してください。")
+assert(inclination > -90 and inclination < 90, "傾斜は開区間(-90°, 90°)で入力してください。")
+
+if n == 0 then
+    return
+end
+
+--乱数生成
+local rand
+if obj.randex then
+    rand = obj.randex(seed, 0)
+else
+    rand = function(st, ed)
+        seed = seed < 0 and seed - 1 or seed + 1
+        return obj.rand(st, ed, seed, 0)
+    end
+end
+--色を保持
+if check_accent then
+    obj.copybuffer("cache:pre", "obj")
+    obj.effect("単色化", "color", col, "輝度を保持する", 0)
+    obj.copybuffer("cache:colored", "obj")
+end
+--ループ外で計算しておく
+local tan_cal = tan(rad(inclination))
+local rz = check_direction and check_direction_spiral and deg(atan(max_height / (PI * k * base_r))) or 0
+
+for i = 1, n do
+    local height = rand(0, max_height)
+    --極座標で乱数を発生させる
+    local r = tan_cal * height + base_r + rand(-random_r, random_r)
+    local angle_d = max_height == 0 and rand(1, 360) + rotation or k * 360 * height / max_height + rotation
+    local angle_r = rad(angle_d)
+    --向きを計算
+    local ry = check_direction and -90 - angle_d or 0
+    --保持した色を描画
+    if check_accent then
+        local buf = rand(0, 1) == 0 and "cache:pre" or "cache:colored"
+        obj.copybuffer("obj", buf)
+    end
+    --極座標をカーテシアン座標に変換して描画
+    obj.draw(r * cos(angle_r), height + rand(-random_height, random_height), r * sin(angle_r), 1, 1, 0, ry, rz)
+end
+end)
+if not chk then
+    setfont("游ゴシック",50)
+    obj.load("text", "[ランダム螺旋配置@ランダム丸配置.anm]\n"..mes)
+    obj.draw()
+    error("[ランダム螺旋配置@ランダム丸配置.anm]"..mes)
+end
+
+
+@ランダムトーラス配置
+--[[
+    ランダムトーラス配置
+    
+    スライダーの説明
+        回転：トーラス全体を回転させる。
+        半径：トーラスの半径。
+        始点：スタート角度。
+        終点：ゴール角度。
+    
+    チェックボックス、向き調整について
+        それぞれに対して中心を向くようにする。
+    
+    ダイアログについて
+        アクセント有効：アクセントカラーを有効無効を切り替える。
+        アクセントカラー：アクセントカラーを指定できる。配色はランダムに決まる。
+        個数：個数を指定する。
+        チューブ半径：トーラスのチューブ状部分の半径を指定する。
+        充填：通常はトーラスの表面にランダムに分布するが、チェックを入れると、内部まで分布する。
+        紡錘形化：端をすぼませる。
+        seed：シード値。再現性のあるランダム値にする。0以上ではどのレイヤーに置くかで変わってくる。負の値でレイヤーによる出力の変化を無効化する。
+
+    by Korarei
+]]--
+
+
+--track0:回転,-3600,3600,0
+--track1:半径,0,2000,100
+--track2:始点,1,360,1
+--track3:終点,1,360,360
+--check0:向き調整,1
+--dialog:アクセント有効/chk,_1=0; └アクセントカラー/col,_2=0xffffff; 個数,_3=100; チューブ半径,_4=40; 充填/chk,_5=0; 紡錘形化/chk,_6=0; seed,_7=-1;
+
+local chk, mes = pcall(function()
+local cos, sin, rad, floor = math.cos, math.sin, math.rad, math.floor
+
+local rotation = obj.track0
+local base_r = obj.track1
+local st = obj.track2
+local ed = obj.track3
+local check_direction = obj.check0
+local check_accent = _1 == 1 _1 = nil
+local col = _2 _2 = nil
+local n = floor(_3) _3 = nil
+local base_d = _4 _4 = nil
+local check_filling = _5 == 1 _5 = nil
+local check_spindle = _6 == 1 _6 = nil
+local seed = _7 _7 = nil
+assert(n >= 0, "個数は0以上の整数で入力してください。")
+
+if n == 0 then
+    return
+end
+
+--乱数生成
+local rand
+if obj.randex then
+    rand = obj.randex(seed, 0)
+else
+    rand = function(st, ed)
+        seed = seed < 0 and seed - 1 or seed + 1
+        return obj.rand(st, ed, seed, 0)
+    end
+end
+--色を保持
+if check_accent then
+    obj.copybuffer("cache:pre", "obj")
+    obj.effect("単色化", "color", col, "輝度を保持する", 0)
+    obj.copybuffer("cache:colored", "obj")
+end
+
+for i = 1, n do
+    --極座標で乱数を発生させる
+    local angle_d = rand(st, ed) + rotation
+    local angle_r = rad(angle_d)
+    --チューブで新たに座標をとり、極座標で乱数を発生させる。(ローカル座標的な感じ)
+    local pitch_d = rand(1, 360)
+    local pitch_r = rad(pitch_d)
+    --紡錘形化(二次関数をいい感じに調整したやつ)
+    local d_pre = check_spindle and base_d - 4 * base_d / (st - ed) ^ 2 * (angle_d - rotation - (st + ed) / 2) ^ 2 or base_d
+    --内部を埋める
+    local d = check_filling and rand(0, d_pre) or d_pre
+    local r = base_r + d * cos(pitch_r)
+    --向き計算(z→y→xの順で計算されるらしいので、他と向きが違う)
+    local rx = check_direction and 90 + angle_d or 0
+    local ry = check_direction and -pitch_d or 0
+    --保持した色を描画
+    if check_accent then
+        local buf = rand(0, 1) == 0 and "cache:pre" or "cache:colored"
+        obj.copybuffer("obj", buf)
+    end
+    --極座標からカーテシアン座標に変換して描画
+    obj.draw(d * sin(pitch_r), r * cos(angle_r), r * sin(angle_r), 1, 1, rx, ry, 0)
+end
+end)
+if not chk then
+    setfont("游ゴシック",50)
+    obj.load("text", "[ランダムトーラス配置@ランダム丸配置.anm]\n"..mes)
+    obj.draw()
+    error("[ランダムトーラス配置@ランダム丸配置.anm]"..mes)
+end
